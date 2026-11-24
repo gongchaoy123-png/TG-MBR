@@ -1,5 +1,5 @@
 """
-CLRN-style multi-behavior BPR training / evaluation entry point.
+TARGET multi-behavior BPR training / evaluation entry point.
 
 - Multi-behavior data loading (trn_<behavior> scipy sparse pickles, target last)
 - Per-epoch re-sampling of per-behavior positive/negative items (Eq.13 triples)
@@ -7,8 +7,8 @@ CLRN-style multi-behavior BPR training / evaluation entry point.
 - Evaluation: leave-one-out protocol, 1 held-out target item + 99 sampled
   negatives per user and HR/NDCG@10 and @20
 
-Run (Tmall, paper hyperparameters):
-    python main-TG-MBR.py --dataset Tmall --hidden_dim 32 --batch 8192 \
+Run (Tmall; see README.md for the complete paper configuration):
+    python main_target.py --dataset Tmall --hidden_dim 32 --batch 8192 \
         --gnn_layer 3 --interaction_filter --interaction_filter_strength 0.05
 """
 
@@ -20,6 +20,8 @@ import pickle
 import random
 from pathlib import Path
 
+from Params import args
+
 import numpy as np
 import torch
 import torch.utils.data as dataloader
@@ -29,11 +31,10 @@ try:
 except ImportError:
     tqdm = lambda x, *a, **k: x
 
-from Params import args
 from Timelogger import log
 from evaluation_data import build_test_candidates
 import graph_utils
-from model import CLRN
+from model import TARGET
 
 BEHAVIORS = {
     'Tmall': ['pv', 'fav', 'cart', 'buy'],
@@ -109,16 +110,16 @@ def load_data():
     # The repository stores IJCAI under ``datasets/IJCAI`` while older
     # commands and the behavior table use ``IJCAI_15``.
     dataset_dir = {'IJCAI_15': 'IJCAI'}.get(args.dataset, args.dataset)
-    trn_file = f'{args.path}{dataset_dir}/trn_'
+    dataset_path = Path(args.path) / dataset_dir
     behaviors_data = []
     user_num = item_num = -1
     for beh in behaviors:
-        with open(f'{trn_file}{beh}', 'rb') as fs:
+        with (dataset_path / f'trn_{beh}').open('rb') as fs:
             data = pickle.load(fs).tocsr()
         behaviors_data.append(data)
         user_num = max(user_num, data.shape[0])
         item_num = max(item_num, data.shape[1])
-    with open(f'{args.path}{dataset_dir}/tst_int', 'rb') as fs:
+    with (dataset_path / 'tst_int').open('rb') as fs:
         tst = pickle.load(fs)
     test_user = np.array([idx for idx, i in enumerate(tst) if i is not None], dtype=np.int64)
     test_item = np.array([i for i in tst if i is not None], dtype=np.int64)
@@ -206,7 +207,7 @@ def evaluate(model, test_user, test_item, cand):
             metrics[name][f'NDCG@{k}'] = ndcg_sums[name][k] / denominator
     if compare_base:
         count = max(cand.numel(), 1)
-        print(f'IF eval epoch {model.current_epoch}: '
+        print(f'CPF eval epoch {model.current_epoch}: '
               f'{format_metrics(metrics["base"], "base_")}  | '
               f'{format_metrics(metrics["full"], "full_")}  | '
               f'mean_abs_base {base_abs_sum / count:.5g}  '
@@ -230,7 +231,7 @@ def main(benchmark=None):
 
     behaviors, behaviors_data, user_num, item_num, test_user, test_item = load_data()
     if args.eval_protocol in ('fixed', 'test_early_stop'):
-        # Match the previous CLRN version: use every interaction in the
+        # Match the previous training version: use every interaction in the
         # stored training matrices.  No validation edge is removed.
         train_target = behaviors_data[-1].tocsr()
         train_u, train_i = train_target.nonzero()
@@ -273,7 +274,7 @@ def main(benchmark=None):
     test_user_t = torch.as_tensor(test_user, device=device)
     test_cand_t = torch.as_tensor(test_cand, device=device)
 
-    model = CLRN(user_num, item_num, adj_list).to(device)
+    model = TARGET(user_num, item_num, adj_list).to(device)
     opt = torch.optim.Adam(model.parameters(), lr=args.lr)
     checkpoint_metadata = None
     if args.save_best and benchmark is None:
@@ -288,15 +289,14 @@ def main(benchmark=None):
 
     log('Model Prepared')
     best_metrics, best_epoch, wait = None, -1, 0
-    best_state = copy.deepcopy(model.state_dict()) if benchmark is None else None
+    best_state = (copy.deepcopy(model.state_dict())
+                  if benchmark is None and args.eval_protocol == 'valid' else None)
     history = {'loss': []}
     for split in ('valid', 'test'):
         for metric in ('HR@10', 'HR@20', 'NDCG@10', 'NDCG@20'):
             history[f'{split}_{metric}'] = []
 
-    # Match the fixed-epoch protocol used by SCKGD by default.  The previous
-    # implementation trained epochs 0..args.epoch and selected a validation
-    # checkpoint; ``--eval_protocol valid`` keeps that alternative available.
+    # Use one-based epochs consistently in training and residual scheduling.
     for epoch in range(1, args.epoch + 1):
         model.current_epoch = epoch if benchmark is None else benchmark.model_epoch(epoch)
         log(f'***************** Start epoch: {epoch} ************************')
@@ -339,7 +339,7 @@ def main(benchmark=None):
             continue
 
         if args.interaction_filter_diagnostics:
-            print(f'IF train epoch {epoch}: max_preclip_grad_norm {grad_norm_max:.5g}, '
+            print(f'CPF train epoch {epoch}: max_preclip_grad_norm {grad_norm_max:.5g}, '
                   f'clipped_batches {clipped_batches}/{nb}')
         history['loss'].append(epoch_loss)
         if args.eval_protocol == 'fixed':
@@ -424,7 +424,7 @@ def main(benchmark=None):
 def save_history(history):
     save_dir = f'./History/{args.dataset}'
     os.makedirs(save_dir, exist_ok=True)
-    name = f'CLRN-paper-{args.dataset}-lr-{args.lr}-L-{args.gnn_layer}-d-{args.hidden_dim}'
+    name = f'TARGET-{args.dataset}-lr-{args.lr}-L-{args.gnn_layer}-d-{args.hidden_dim}'
     with open(os.path.join(save_dir, name + '.his'), 'wb') as fs:
         pickle.dump(history, fs)
 

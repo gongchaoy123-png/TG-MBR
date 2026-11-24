@@ -2,32 +2,32 @@ import argparse
 
 
 def ParseArgs():
-	parser = argparse.ArgumentParser(description='CLRN-style multi-behavior BPR recommendation')
+	parser = argparse.ArgumentParser(description='TARGET multi-behavior BPR recommendation')
 	# dataset
 	parser.add_argument('--path', default='./datasets/', type=str, help='path to datasets')
 	parser.add_argument('--dataset', default='Tmall', type=str,
 						help='Tmall / Taobao / Beibei / IJCAI / IJCAI_15 / Yelp / yelp_tiny / MultiInt-ML10M / retail / retail_small')
 
 	# model
-	parser.add_argument('--hidden_dim', default=32, type=int, help='embedding size (Retail=16, Tmall/IJCAI=32)')
+	parser.add_argument('--hidden_dim', default=32, type=int, help='embedding dimension')
 	parser.add_argument('--gnn_layer', default=3, type=int, help='number of GNN layers')
-	parser.add_argument('--behavior_fusion', choices=['attention', 'equal'], default='attention',
-						help='learned global behavior importance or uniform weights for ablation')
+	parser.add_argument('--behavior_fusion', choices=['importance', 'attention', 'equal'], default='importance',
+						help='importance: learned global behavior importance; equal: uniform weights; attention: legacy alias for importance')
 	parser.add_argument('--interaction_filter', action='store_true', default=False,
-						help='enable target-conditioned interaction-level preference filtering')
+						help='enable candidate-level pseudo-interaction filtering (CPF)')
 	parser.add_argument('--interaction_filter_strength', default=0.2, type=float,
-						help='blend strength of interaction-level target score')
+						help='target strength of the candidate residual')
 	parser.add_argument('--interaction_filter_warmup', default=0, type=int,
-						help='epochs before interaction filtering starts')
+						help='warm-up epochs before candidate residuals start')
 	parser.add_argument('--interaction_filter_ramp', default=1, type=int,
-						help='epochs used to ramp interaction filtering to full strength')
+						help='epochs used to ramp the candidate residual to its target strength')
 	parser.add_argument('--interaction_filter_diagnostics', action='store_true',
 						help='log gradient norms and compare scores with and without the residual')
 	parser.add_argument('--device', default='gpu', type=str, help='gpu or cpu')
 
 	# training
 	parser.add_argument('--lr', default=1e-3, type=float, help='learning rate (grid: 1e-2/1e-3/1e-4)')
-	parser.add_argument('--batch', default=8192, type=int, help='batch size (Tmall/IJCAI=8192, Retail=2048)')
+	parser.add_argument('--batch', default=8192, type=int, help='training batch size')
 	parser.add_argument('--eval_batch', default=512, type=int,
 						help='number of users evaluated per chunk to control GPU memory')
 	parser.add_argument('--epoch', default=100, type=int, help='epochs')

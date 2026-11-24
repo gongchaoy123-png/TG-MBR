@@ -1,4 +1,4 @@
-"""Target behavior-guided multi-granularity recommendation."""
+"""TARGET: target-guided multi-granularity auxiliary refinement."""
 
 import torch
 import torch.nn as nn
@@ -6,11 +6,10 @@ import torch.nn.functional as F
 from Params import args
 
 
-class CLRN(nn.Module):
+class TARGET(nn.Module):
     def __init__(self, num_user, num_item, adj_list):
         super().__init__()
         self.num_user = num_user
-        self.num_item = num_item
         self.latdim = args.hidden_dim
         self.gcn_layer = args.gnn_layer
         self.behavior_num = len(adj_list)
@@ -19,7 +18,7 @@ class CLRN(nn.Module):
         self.current_epoch = 0
         self.alpha_logits = (
             nn.Parameter(torch.zeros(self.behavior_num))
-            if args.behavior_fusion == 'attention' else None
+            if args.behavior_fusion in ('importance', 'attention') else None
         )
 
         self.user_emb = nn.Parameter(torch.randn(num_user, self.latdim) * 0.1)
@@ -43,6 +42,8 @@ class CLRN(nn.Module):
                 nn.Linear(self.latdim * 5, self.latdim)
                 for _ in range(auxiliary_count)
             ])
+            # Candidate-aware auxiliary preference mapping. Keep the parameter key
+            # interaction_item_layers for compatibility with existing checkpoints.
             self.interaction_item_layers = nn.ModuleList([
                 nn.Linear(self.latdim * 3, self.latdim)
                 for _ in range(auxiliary_count)
@@ -98,7 +99,7 @@ class CLRN(nn.Module):
                     nn.init.zeros_(gate[2].weight)
                     nn.init.constant_(gate[2].bias, 2.0)
 
-        print(f'TG-MBR: behavior fusion={args.behavior_fusion}, '
+        print(f'TARGET: behavior fusion={args.behavior_fusion}, '
               f'K={self.behavior_num}, L={self.gcn_layer}, d={self.latdim}, '
               f'denoising={args.denoise_mode}')
 
@@ -170,7 +171,7 @@ class CLRN(nn.Module):
 
     def interaction_target_scores(self, users, items, behavior_u, behavior_i,
                                   behavior_weight):
-        """Score pairs using target-conditioned item-aware filtering."""
+        """Score pairs using target-guided filtering and candidate-aware auxiliary preference mapping."""
         target_u = behavior_u[users, -1]
         target_i = behavior_i[items, -1]
         residuals = []
