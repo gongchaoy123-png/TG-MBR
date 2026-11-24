@@ -32,7 +32,7 @@ def ParseArgs():
 						help='number of users evaluated per chunk to control GPU memory')
 	parser.add_argument('--epoch', default=100, type=int, help='epochs')
 	parser.add_argument('--reg', default=1e-4, type=float, help='lambda3, L2 regularization (grid: 1e-2..1e-4)')
-	parser.add_argument('--patience', default=20, type=int, help='early stop patience')
+	parser.add_argument('--patience', default=50, type=int, help='early stop patience')
 	parser.add_argument('--seed', default=42, type=int, help='random seed')
 	parser.add_argument('--save_best', default=None, type=str,
 						help='optional checkpoint file for the best epoch (test_early_stop protocol)')

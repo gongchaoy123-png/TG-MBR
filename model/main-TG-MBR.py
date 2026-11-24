@@ -8,7 +8,7 @@ CLRN-style multi-behavior BPR training / evaluation entry point.
   negatives per user and HR/NDCG@10 and @20
 
 Run (Tmall, paper hyperparameters):
-    python main_clrn.py --dataset Tmall --hidden_dim 32 --batch 8192 \
+    python main-TG-MBR.py --dataset Tmall --hidden_dim 32 --batch 8192 \
         --gnn_layer 3 --interaction_filter --interaction_filter_strength 0.05
 """
 
